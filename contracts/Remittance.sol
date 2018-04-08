@@ -3,7 +3,7 @@ pragma solidity ^0.4.17;
 contract Remittance {
 
     address public owner;
-    bool public stopped = false;
+    bool public paused = false;
 
     struct RemittanceInstance {
         uint256 amount;
@@ -26,20 +26,22 @@ contract Remittance {
         _;
     }
 
-    modifier isNotStopped() {
-        require(stopped == false);
+    modifier isNotPaused() {
+        require(paused == false);
         _;
     }
 
-    function createRemittance(bytes32 puzzle, uint256 deadline, address recipient) isNotStopped payable public {
+    function createRemittance(bytes32 puzzle, uint256 deadline, address recipient) isNotPaused payable public {
         require(msg.value != 0);
         require(deadline < 40320);
+        require(remittances[puzzle].amount == 0);
         uint256 actualDeadline = block.number+deadline;
+
         remittances[puzzle] = RemittanceInstance(msg.value, actualDeadline, msg.sender, recipient);
         RemittanceCreated(msg.sender, recipient, msg.value, puzzle, actualDeadline);
     }
 
-    function claimRemittance(string password) isNotStopped public {
+    function claimRemittance(string password) isNotPaused public {
         bytes32 solution = keccak256(password, msg.sender);
         RemittanceInstance storage remittance = remittances[solution];
         assert(remittance.recipient == msg.sender);
@@ -48,11 +50,11 @@ contract Remittance {
         assert(amount != 0);
 
         delete remittances[solution];
-        msg.sender.transfer(amount);
         RemittanceClaimed(msg.sender, solution);
+        msg.sender.transfer(amount);
     }
 
-    function reclaimRemittance(bytes32 puzzle) isNotStopped public {
+    function reclaimRemittance(bytes32 puzzle) isNotPaused public {
         RemittanceInstance storage remittance = remittances[puzzle];
         require(remittance.issuer == msg.sender);
         require(block.number > remittance.deadline);
@@ -61,12 +63,16 @@ contract Remittance {
         assert(amount != 0);
 
         delete remittances[puzzle];
-        msg.sender.transfer(amount);
         RemittanceReclaimed(puzzle);
+        msg.sender.transfer(amount);
     }
 
-    function kill() onlyOwner isNotStopped public {
-        stopped = true;
+    function pause() onlyOwner isNotPaused public {
+        paused = true;
+    }
+
+    function resume() onlyOwner public {
+        paused = false;
     }
 
 }

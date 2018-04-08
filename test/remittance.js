@@ -49,7 +49,7 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail when no Ether sent in");
+      throw new Error("Should fail when deadline equal to the limit");
     });
 
     it("should fail if deadline is above to the limit", async () => {
@@ -62,7 +62,7 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail when no Ether sent in");
+      throw new Error("Should fail when deadline is above the limit");
     });
 
     it("should create a remittance with the correct values", async () => {
@@ -84,6 +84,24 @@ contract("Remittance", function(accounts) {
       );
       assert.strictEqual(remittance[2], account0, "issuer is not correct");
       assert.strictEqual(remittance[3], account1, "recipient is not correct");
+    });
+
+    it("should fail if remittance already exists", async () => {
+      await contract.createRemittance(puzzle, 100, account1, {
+        from: account0,
+        value: 1000
+      });
+
+      try {
+        await contract.createRemittance(puzzle, 100, account1, {
+          from: account0,
+          value: 1001
+        });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error("Should fail when remittance already exists");
     });
   });
 
@@ -273,33 +291,33 @@ contract("Remittance", function(accounts) {
     });
   });
 
-  describe("kill", function() {
+  describe("pause", function() {
     it("should revert if sender is not owner", async () => {
       try {
-        await contract.kill({ from: account1 });
+        await contract.pause({ from: account1 });
       } catch (e) {
         return true;
       }
 
       throw new Error(
-        "Should fail when anyone but Owner (account0) tries to kill"
+        "Should fail when anyone but Owner (account0) tries to pause"
       );
     });
 
-    it("should fail if tries to kill after is stopped", async () => {
-      await contract.kill({ from: account0 });
+    it("should fail if tries to pause after is paused", async () => {
+      await contract.pause({ from: account0 });
 
       try {
-        await contract.kill({ from: account0 });
+        await contract.pause({ from: account0 });
       } catch (e) {
         return true;
       }
 
-      throw new Error("Should fail tries to kill after being stopped");
+      throw new Error("Should fail tries to pause after being paused");
     });
 
-    it("should fail if tries to createRemittance after is stopped", async () => {
-      await contract.kill({ from: account0 });
+    it("should fail if tries to createRemittance after is paused", async () => {
+      await contract.pause({ from: account0 });
 
       try {
         await contract.createRemittance(puzzle, 0, account1, {
@@ -310,16 +328,16 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail tries to kill after being stopped");
+      throw new Error("Should fail tries to createRemittance after being paused");
     });
 
-    it("should fail if tries to claimRemittance after is stopped", async () => {
+    it("should fail if tries to claimRemittance after is paused", async () => {
         await contract.createRemittance(puzzle, 0, account1, {
           from: account0,
           value: 100
         });
   
-        await contract.kill({ from: account0 });
+        await contract.pause({ from: account0 });
   
         try {
             await contract.claimRemittance(password, {
@@ -329,10 +347,10 @@ contract("Remittance", function(accounts) {
           return true;
         }
   
-        throw new Error("Should fail tries to kill after being stopped");
+        throw new Error("Should fail tries to claimRemittance after being paused");
       });
 
-    it("should fail if tries to reclaimRemittance after is stopped", async () => {
+    it("should fail if tries to reclaimRemittance after is paused", async () => {
       await contract.createRemittance(puzzle, 0, account1, {
         from: account0,
         value: 100
@@ -340,7 +358,7 @@ contract("Remittance", function(accounts) {
       const remittance = await contract.remittances(puzzle);
       await mineBlock(remittance[1].toNumber());
 
-      await contract.kill({ from: account0 });
+      await contract.pause({ from: account0 });
 
       try {
         await contract.reclaimRemittance(puzzle, {
@@ -350,8 +368,77 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail tries to kill after being stopped");
+      throw new Error("Should fail tries to reclaimRemittance after being paused");
     });
+  });
+
+  describe("resume", function () {
+    it("should revert if sender is not owner", async () => {
+      await contract.pause({ from: account0 });
+
+      try {
+        await contract.resume({ from: account1 });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error(
+        "Should fail when anyone but Owner (account0) tries to resume"
+      );
+    });
+
+    it("should not fail if tries to createRemittance after is resumed", async () => {
+      await contract.pause({ from: account0 });
+      await contract.resume({ from: account0 });
+
+      try {
+        await contract.createRemittance(puzzle, 0, account1, {
+          from: account0,
+          value: 100
+        });
+      } catch (e) {
+        throw new Error("Should not fail after resumed");
+      }
+    });
+
+    it("should not fail if tries to claimRemittance after is resumed", async () => {
+        await contract.createRemittance(puzzle, 0, account1, {
+          from: account0,
+          value: 100
+        });
+  
+        await contract.pause({ from: account0 });
+        await contract.resume({ from: account0 });
+  
+        try {
+            await contract.claimRemittance(password, {
+                from: account1
+              });
+        } catch (e) {
+          throw new Error("Should not fail after resumed");
+        }
+      });
+
+    it("should not fail if tries to reclaimRemittance after is resumed", async () => {
+      await contract.createRemittance(puzzle, 0, account1, {
+        from: account0,
+        value: 100
+      });
+      const remittance = await contract.remittances(puzzle);
+      await mineBlock(remittance[1].toNumber());
+
+      await contract.pause({ from: account0 });
+      await contract.resume({ from: account0 });
+
+      try {
+        await contract.reclaimRemittance(puzzle, {
+          from: account0
+        });
+      } catch (e) {
+        throw new Error("Should not fail after resumed");
+      }
+    });
+
   });
 });
 
