@@ -10,6 +10,7 @@ contract Remittance {
         uint256 deadline;
         address issuer;
         address recipient;
+        bool claimed;
     }
     mapping(bytes32 => RemittanceInstance) public remittances;
 
@@ -37,7 +38,7 @@ contract Remittance {
         require(remittances[puzzle].amount == 0);
         uint256 actualDeadline = block.number+deadline;
 
-        remittances[puzzle] = RemittanceInstance(msg.value, actualDeadline, msg.sender, recipient);
+        remittances[puzzle] = RemittanceInstance(msg.value, actualDeadline, msg.sender, recipient, false);
         RemittanceCreated(msg.sender, recipient, msg.value, puzzle, actualDeadline);
     }
 
@@ -45,11 +46,12 @@ contract Remittance {
         bytes32 solution = keccak256(password, msg.sender);
         RemittanceInstance storage remittance = remittances[solution];
         assert(remittance.recipient == msg.sender);
+        assert(remittance.claimed == false);
 
         uint256 amount = remittance.amount;
         assert(amount != 0);
 
-        delete remittances[solution];
+        remittance.claimed = true;
         RemittanceClaimed(msg.sender, solution);
         msg.sender.transfer(amount);
     }
@@ -58,11 +60,12 @@ contract Remittance {
         RemittanceInstance storage remittance = remittances[puzzle];
         require(remittance.issuer == msg.sender);
         require(block.number > remittance.deadline);
+        require(remittance.claimed == false);
 
         uint256 amount = remittance.amount;
         assert(amount != 0);
 
-        delete remittances[puzzle];
+        remittance.claimed = true;
         RemittanceReclaimed(puzzle);
         msg.sender.transfer(amount);
     }

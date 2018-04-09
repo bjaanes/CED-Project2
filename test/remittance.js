@@ -103,6 +103,30 @@ contract("Remittance", function(accounts) {
 
       throw new Error("Should fail when remittance already exists");
     });
+
+    it("should fail if remittance already exists, but is claimed", async () => {
+      await contract.createRemittance(puzzle, 100, account1, {
+        from: account0,
+        value: 1000
+      });
+
+      await contract.claimRemittance(password, {
+        from: account1
+      });
+
+      try {
+        await contract.createRemittance(puzzle, 100, account1, {
+          from: account0,
+          value: 1001
+        });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error(
+        "Should fail when remittance already exists but is claimed"
+      );
+    });
   });
 
   describe("claimRemittance", function() {
@@ -158,7 +182,7 @@ contract("Remittance", function(accounts) {
       );
     });
 
-    it("should reset remittance for the puzzle", async () => {
+    it("should set remittance to claimed for the puzzle", async () => {
       await contract.claimRemittance(password, {
         from: account1
       });
@@ -166,24 +190,33 @@ contract("Remittance", function(accounts) {
       const remittance = await contract.remittances(puzzle);
       assert.strictEqual(
         remittance[0].toString(10),
-        "0",
+        "100",
         "amount is not correct"
       );
       assert.strictEqual(
         remittance[1].toString(10),
-        "0",
+        tx.receipt.blockNumber + 1000 + "",
         "deadline is not correct"
       );
-      assert.strictEqual(
-        remittance[2],
-        "0x0000000000000000000000000000000000000000",
-        "issuer is not correct"
-      );
-      assert.strictEqual(
-        remittance[3],
-        "0x0000000000000000000000000000000000000000",
-        "recipient is not correct"
-      );
+      assert.strictEqual(remittance[2], account0, "issuer is not correct");
+      assert.strictEqual(remittance[3], account1, "recipient is not correct");
+      assert.strictEqual(remittance[4], true, "not set to claimed");
+    });
+
+    it("should fail if try to claim same remittance twice", async () => {
+      await contract.claimRemittance(password, {
+        from: account1
+      });
+
+      try {
+        await contract.claimRemittance(password, {
+          from: account1
+        });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error("Should fail when already claimed");
     });
   });
 
@@ -253,7 +286,7 @@ contract("Remittance", function(accounts) {
       );
     });
 
-    it("should reset remittance for the puzzle", async () => {
+    it("should set remittance to claimed for the puzzle", async () => {
       await contract.createRemittance(puzzle, 0, account1, {
         from: account0,
         value: 100
@@ -270,24 +303,21 @@ contract("Remittance", function(accounts) {
       const remittanceAfter = await contract.remittances(puzzle);
       assert.strictEqual(
         remittanceAfter[0].toString(10),
-        "0",
+        "100",
         "amount is not correct"
       );
       assert.strictEqual(
         remittanceAfter[1].toString(10),
-        "0",
+        reclaimTx.receipt.blockNumber - 1 + "",
         "deadline is not correct"
       );
-      assert.strictEqual(
-        remittanceAfter[2],
-        "0x0000000000000000000000000000000000000000",
-        "issuer is not correct"
-      );
+      assert.strictEqual(remittanceAfter[2], account0, "issuer is not correct");
       assert.strictEqual(
         remittanceAfter[3],
-        "0x0000000000000000000000000000000000000000",
+        account1,
         "recipient is not correct"
       );
+      assert.strictEqual(remittanceAfter[4], true, "claimed not set to true");
     });
   });
 
@@ -328,27 +358,31 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail tries to createRemittance after being paused");
+      throw new Error(
+        "Should fail tries to createRemittance after being paused"
+      );
     });
 
     it("should fail if tries to claimRemittance after is paused", async () => {
-        await contract.createRemittance(puzzle, 0, account1, {
-          from: account0,
-          value: 100
-        });
-  
-        await contract.pause({ from: account0 });
-  
-        try {
-            await contract.claimRemittance(password, {
-                from: account1
-              });
-        } catch (e) {
-          return true;
-        }
-  
-        throw new Error("Should fail tries to claimRemittance after being paused");
+      await contract.createRemittance(puzzle, 0, account1, {
+        from: account0,
+        value: 100
       });
+
+      await contract.pause({ from: account0 });
+
+      try {
+        await contract.claimRemittance(password, {
+          from: account1
+        });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error(
+        "Should fail tries to claimRemittance after being paused"
+      );
+    });
 
     it("should fail if tries to reclaimRemittance after is paused", async () => {
       await contract.createRemittance(puzzle, 0, account1, {
@@ -368,11 +402,13 @@ contract("Remittance", function(accounts) {
         return true;
       }
 
-      throw new Error("Should fail tries to reclaimRemittance after being paused");
+      throw new Error(
+        "Should fail tries to reclaimRemittance after being paused"
+      );
     });
   });
 
-  describe("resume", function () {
+  describe("resume", function() {
     it("should revert if sender is not owner", async () => {
       await contract.pause({ from: account0 });
 
@@ -402,22 +438,22 @@ contract("Remittance", function(accounts) {
     });
 
     it("should not fail if tries to claimRemittance after is resumed", async () => {
-        await contract.createRemittance(puzzle, 0, account1, {
-          from: account0,
-          value: 100
-        });
-  
-        await contract.pause({ from: account0 });
-        await contract.resume({ from: account0 });
-  
-        try {
-            await contract.claimRemittance(password, {
-                from: account1
-              });
-        } catch (e) {
-          throw new Error("Should not fail after resumed");
-        }
+      await contract.createRemittance(puzzle, 0, account1, {
+        from: account0,
+        value: 100
       });
+
+      await contract.pause({ from: account0 });
+      await contract.resume({ from: account0 });
+
+      try {
+        await contract.claimRemittance(password, {
+          from: account1
+        });
+      } catch (e) {
+        throw new Error("Should not fail after resumed");
+      }
+    });
 
     it("should not fail if tries to reclaimRemittance after is resumed", async () => {
       await contract.createRemittance(puzzle, 0, account1, {
@@ -438,7 +474,6 @@ contract("Remittance", function(accounts) {
         throw new Error("Should not fail after resumed");
       }
     });
-
   });
 });
 
