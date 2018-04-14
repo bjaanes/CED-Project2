@@ -2,6 +2,8 @@ pragma solidity ^0.4.17;
 
 contract Remittance {
 
+    uint constant maxDeadline = 40320;
+
     address public owner;
     bool public paused = false;
 
@@ -17,6 +19,8 @@ contract Remittance {
     event RemittanceCreated(address indexed creator, address indexed recipient, uint256 amount, bytes32 puzzle, uint256 deadline);
     event RemittanceClaimed(address indexed claimer, bytes32 puzzle);
     event RemittanceReclaimed(bytes32 puzzle);
+    event RemittancePaused();
+    event RemittanceResumed();
 
     function Remittance() public {
         owner = msg.sender;
@@ -34,7 +38,7 @@ contract Remittance {
 
     function createRemittance(bytes32 puzzle, uint256 deadline, address recipient) isNotPaused payable public {
         require(msg.value != 0);
-        require(deadline < 40320);
+        require(deadline < maxDeadline);
         require(remittances[puzzle].amount == 0);
         uint256 actualDeadline = block.number+deadline;
 
@@ -45,8 +49,10 @@ contract Remittance {
     function claimRemittance(string password) isNotPaused public {
         bytes32 solution = keccak256(password, msg.sender);
         RemittanceInstance storage remittance = remittances[solution];
-        assert(remittance.recipient == msg.sender);
-        assert(remittance.claimed == false);
+        require(block.number <= remittance.deadline);
+        require(remittance.recipient == msg.sender);
+        require(remittance.claimed == false);
+
 
         uint256 amount = remittance.amount;
         assert(amount != 0);
@@ -60,7 +66,7 @@ contract Remittance {
         RemittanceInstance storage remittance = remittances[puzzle];
         require(remittance.issuer == msg.sender);
         require(block.number > remittance.deadline);
-        require(remittance.claimed == false);
+        require(!remittance.claimed);
 
         uint256 amount = remittance.amount;
         assert(amount != 0);
@@ -72,10 +78,12 @@ contract Remittance {
 
     function pause() onlyOwner isNotPaused public {
         paused = true;
+        RemittancePaused();
     }
 
     function resume() onlyOwner public {
         paused = false;
+        RemittanceResumed();
     }
 
 }

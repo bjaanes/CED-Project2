@@ -130,15 +130,13 @@ contract("Remittance", function(accounts) {
   });
 
   describe("claimRemittance", function() {
-    var tx;
-    beforeEach(async () => {
-      tx = await contract.createRemittance(puzzle, 1000, account1, {
+
+    it("should fail if solution doesn't exist", async () => {
+      const tx = await contract.createRemittance(puzzle, 1000, account1, {
         from: account0,
         value: 100
       });
-    });
 
-    it("should fail if solution doesn't exist", async () => {
       try {
         await contract.claimRemittance("attack", {
           from: account0
@@ -151,6 +149,11 @@ contract("Remittance", function(accounts) {
     });
 
     it("should fail if sender is not recipient", async () => {
+      const tx = await contract.createRemittance(puzzle, 1000, account1, {
+        from: account0,
+        value: 100
+      });
+
       try {
         await contract.claimRemittance(password, {
           from: account2
@@ -162,7 +165,32 @@ contract("Remittance", function(accounts) {
       throw new Error("Should fail when sender is not recipient");
     });
 
+    it("should fail if deadline is passed", async () => {
+      const tx = await contract.createRemittance(puzzle, 0, account1, {
+        from: account0,
+        value: 100
+      });
+
+      const remittance = await contract.remittances(puzzle);
+      await mineBlock(remittance[1].toNumber());
+
+      try {
+        await contract.claimRemittance(password, {
+          from: account1
+        });
+      } catch (e) {
+        return true;
+      }
+
+      throw new Error("Should fail when solution doesn't exist");
+    });
+
     it("should send correct amount of ether if everything is OK", async () => {
+      const tx = await contract.createRemittance(puzzle, 1000, account1, {
+        from: account0,
+        value: 100
+      });
+
       let beforeBalance = await web3.eth.getBalance(account1);
       const claimTx = await contract.claimRemittance(password, {
         from: account1
@@ -183,6 +211,11 @@ contract("Remittance", function(accounts) {
     });
 
     it("should set remittance to claimed for the puzzle", async () => {
+      const tx = await contract.createRemittance(puzzle, 1000, account1, {
+        from: account0,
+        value: 100
+      });
+
       await contract.claimRemittance(password, {
         from: account1
       });
@@ -204,6 +237,11 @@ contract("Remittance", function(accounts) {
     });
 
     it("should fail if try to claim same remittance twice", async () => {
+      const tx = await contract.createRemittance(puzzle, 1000, account1, {
+        from: account0,
+        value: 100
+      });
+      
       await contract.claimRemittance(password, {
         from: account1
       });
@@ -428,7 +466,7 @@ contract("Remittance", function(accounts) {
       await contract.resume({ from: account0 });
 
       try {
-        await contract.createRemittance(puzzle, 0, account1, {
+        await contract.createRemittance(puzzle, 10, account1, {
           from: account0,
           value: 100
         });
@@ -438,7 +476,7 @@ contract("Remittance", function(accounts) {
     });
 
     it("should not fail if tries to claimRemittance after is resumed", async () => {
-      await contract.createRemittance(puzzle, 0, account1, {
+      await contract.createRemittance(puzzle, 10, account1, {
         from: account0,
         value: 100
       });
